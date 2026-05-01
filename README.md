@@ -1,5 +1,5 @@
 # CineGo - BookMyShow-like Web App
-
+**“This is a demo project. Payments are simulated and no real transactions are processed.”**
 A complete movie ticket booking application built with HTML5, CSS3, vanilla JavaScript, Node.js, Express.js, bcrypt, express-session, and JSON-file persistence.
 
 ## Features
@@ -53,7 +53,7 @@ Stripe:
 - Set `APP_URL=http://localhost:3000`
 - Use "Pay with Stripe" on the payment page
 
-**- “This is a demo project. Payments are simulated and no real transactions are processed.”**
+- Payments are simulated and no real transactions are processed.”**
 
 Email receipts:
 
