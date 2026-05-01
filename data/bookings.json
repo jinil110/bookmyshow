@@ -1,0 +1,56 @@
+[
+  {
+    "id": "booking_1777541047918",
+    "userId": "user_1777541020877",
+    "userName": "j p",
+    "movieId": "m4",
+    "movieName": "Beyond Mars",
+    "seats": [
+      "F10",
+      "F9",
+      "F8"
+    ],
+    "showTime": "2026-05-02T22:00",
+    "amount": 780,
+    "paymentStatus": "Paid",
+    "createdAt": "2026-04-30T09:24:07.918Z",
+    "paidAt": "2026-04-30T09:24:16.376Z",
+    "paymentProvider": "Demo"
+  },
+  {
+    "id": "booking_1777541106937",
+    "userId": "user_1777541020877",
+    "userName": "j p",
+    "movieId": "m1",
+    "movieName": "Skyline Chase",
+    "seats": [
+      "D6",
+      "C6"
+    ],
+    "showTime": "2026-05-01T18:30",
+    "amount": 440,
+    "paymentStatus": "Paid",
+    "createdAt": "2026-04-30T09:25:06.937Z",
+    "paidAt": "2026-04-30T09:25:27.394Z",
+    "paymentProvider": "Demo"
+  },
+  {
+    "id": "booking_1777637717080",
+    "userId": "user_1777541020877",
+    "userName": "j p",
+    "movieId": "2",
+    "movieName": "Person of Interest",
+    "seats": [
+      "F10",
+      "F9",
+      "F8"
+    ],
+    "showTime": "2026-05-03T12:15",
+    "amount": 915,
+    "paymentStatus": "Paid",
+    "createdAt": "2026-05-01T12:15:17.081Z",
+    "paymentProvider": "Demo",
+    "stripeSessionId": "mock_session_1777637719772",
+    "paidAt": "2026-05-01T12:15:19.872Z"
+  }
+]

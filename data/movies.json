@@ -1,0 +1,50 @@
+[
+  {
+    "id": "m1",
+    "title": "Skyline Chase",
+    "description": "A sharp city thriller about a stunt driver caught between fame, loyalty, and one impossible midnight race.",
+    "duration": "2h 18m",
+    "rating": "UA",
+    "category": "Action",
+    "price": 220,
+    "showtimes": ["2026-05-01T18:30", "2026-05-01T21:30", "2026-05-02T15:00"],
+    "poster": "https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?auto=format&fit=crop&w=800&q=80",
+    "banner": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1600&q=80"
+  },
+  {
+    "id": "m2",
+    "title": "Monsoon Letters",
+    "description": "A heartfelt romantic drama where two strangers reconnect through old letters during a rain-soaked summer.",
+    "duration": "2h 05m",
+    "rating": "U",
+    "category": "Romance",
+    "price": 180,
+    "showtimes": ["2026-05-01T17:00", "2026-05-02T19:45"],
+    "poster": "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=800&q=80",
+    "banner": "https://images.unsplash.com/photo-1505686994434-e3cc5abf1330?auto=format&fit=crop&w=1600&q=80"
+  },
+  {
+    "id": "m3",
+    "title": "Laugh Riot Live",
+    "description": "A family comedy about a small-town theatre group trying to save their beloved stage from demolition.",
+    "duration": "1h 52m",
+    "rating": "U",
+    "category": "Comedy",
+    "price": 160,
+    "showtimes": ["2026-05-01T16:15", "2026-05-02T20:00"],
+    "poster": "https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&w=800&q=80",
+    "banner": "https://images.unsplash.com/photo-1499364615650-ec38552f4f34?auto=format&fit=crop&w=1600&q=80"
+  },
+  {
+    "id": "m4",
+    "title": "Beyond Mars",
+    "description": "A visually rich science-fiction adventure following a rescue crew racing against oxygen, orbit, and doubt.",
+    "duration": "2h 31m",
+    "rating": "UA",
+    "category": "Sci-Fi",
+    "price": 260,
+    "showtimes": ["2026-05-01T20:30", "2026-05-02T22:00"],
+    "poster": "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=800&q=80",
+    "banner": "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=1600&q=80"
+  }
+]

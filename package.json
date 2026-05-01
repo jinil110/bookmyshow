@@ -1,0 +1,31 @@
+{
+  "name": "bookmyshow-like-json-app",
+  "version": "1.0.0",
+  "description": "A BookMyShow-like movie booking app using Express, vanilla JavaScript, and JSON persistence.",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js"
+  },
+  "dependencies": {
+    "@sendgrid/mail": "^8.1.3",
+    "bcrypt": "^5.1.1",
+    "connect-flash": "^0.1.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.3",
+    "express-session": "^1.18.0",
+    "resend": "^4.0.1",
+    "stripe": "^17.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "keywords": [
+    "bookmyshow",
+    "express",
+    "json",
+    "movie-booking"
+  ],
+  "author": "",
+  "license": "MIT"
+}
