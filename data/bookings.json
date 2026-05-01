@@ -52,5 +52,22 @@
     "paymentProvider": "Demo",
     "stripeSessionId": "mock_session_1777637719772",
     "paidAt": "2026-05-01T12:15:19.872Z"
+  },
+  {
+    "id": "booking_1777639102768",
+    "userId": "user_1777639086624",
+    "userName": "jp",
+    "movieId": "1",
+    "movieName": "Under the Dome",
+    "seats": [
+      "F10"
+    ],
+    "showTime": "2026-05-03T12:38",
+    "amount": 334,
+    "paymentStatus": "Paid",
+    "createdAt": "2026-05-01T12:38:22.768Z",
+    "paymentProvider": "Demo",
+    "stripeSessionId": "mock_session_1777639104631",
+    "paidAt": "2026-05-01T12:38:24.687Z"
   }
 ]
