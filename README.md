@@ -53,6 +53,8 @@ Stripe:
 - Set `APP_URL=http://localhost:3000`
 - Use "Pay with Stripe" on the payment page
 
+**- “This is a demo project. Payments are simulated and no real transactions are processed.”**
+
 Email receipts:
 
 - Use either `RESEND_API_KEY` or `SENDGRID_API_KEY`
