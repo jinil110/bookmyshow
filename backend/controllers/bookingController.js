@@ -1,15 +1,29 @@
-const { readJson, writeJson } = require("../utils/fileStore");
-const { sendBookingReceipt } = require("../utils/emailService");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY || "sk_test_not_configured");
-const { fetchMoviesFromAPI } = require("./movieController");
+const Booking = require("../models/Booking");
+const Show = require("../models/Show");
+const Movie = require("../models/Movie");
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_replace_me",
+  key_secret: process.env.RAZORPAY_KEY_SECRET || "rzp_secret_replace_me",
+});
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER || "your-email@gmail.com",
+    pass: process.env.GMAIL_APP_PASSWORD || "your-app-password",
+  },
+});
 
 async function bookedSeats(req, res) {
   try {
-    const bookings = await readJson("bookings.json");
-    const seats = bookings
-      .filter((booking) => booking.movieId === req.params.movieId && booking.paymentStatus === "Paid")
-      .flatMap((booking) => booking.seats);
-    res.json({ seats });
+    const show = await Show.findById(req.params.showId);
+    if (!show) return res.status(404).json({ message: "Show not found." });
+    
+    res.json({ seats: show.bookedSeats });
   } catch (error) {
     res.status(500).json({ message: "Unable to load booked seats.", error: error.message });
   }
@@ -17,176 +31,183 @@ async function bookedSeats(req, res) {
 
 async function createBooking(req, res) {
   try {
-    const { movieId, seats, showTime } = req.body;
-    if (!movieId || !Array.isArray(seats) || seats.length === 0 || !showTime) {
-      return res.status(400).json({ message: "Movie, seats, and show time are required." });
+    const { showId, seats } = req.body;
+    if (!showId || !Array.isArray(seats) || seats.length === 0) {
+      return res.status(400).json({ message: "Show and seats are required." });
     }
 
-    const movies = await fetchMoviesFromAPI();
-    const movie = movies.find((item) => item.id === movieId);
-    if (!movie) return res.status(404).json({ message: "Movie not found." });
-    if (Array.isArray(movie.showtimes) && movie.showtimes.length && !movie.showtimes.includes(showTime)) {
-      return res.status(400).json({ message: "Please select a valid showtime." });
-    }
+    const show = await Show.findById(showId).populate("movie");
+    if (!show) return res.status(404).json({ message: "Show not found." });
 
-    const bookings = await readJson("bookings.json");
-    const reservedSeats = bookings
-      .filter((booking) => booking.movieId === movieId && booking.paymentStatus === "Paid")
-      .flatMap((booking) => booking.seats);
-    const alreadyTaken = seats.filter((seat) => reservedSeats.includes(seat));
+    const alreadyTaken = seats.filter((seat) => show.bookedSeats.includes(seat));
     if (alreadyTaken.length) {
       return res.status(409).json({ message: `Seats already booked: ${alreadyTaken.join(", ")}` });
     }
 
-    const booking = {
-      id: `booking_${Date.now()}`,
-      userId: req.session.user.id,
-      userName: req.session.user.name,
-      movieId,
-      movieName: movie.title,
+    const amount = seats.length * show.price;
+
+    const booking = await Booking.create({
+      user: req.session.user.id,
+      show: showId,
       seats,
-      showTime,
-      amount: seats.length * movie.price,
-      paymentStatus: "Pending",
-      createdAt: new Date().toISOString()
-    };
-    bookings.push(booking);
-    await writeJson("bookings.json", bookings);
+      totalAmount: amount,
+      status: "pending",
+    });
+
     res.status(201).json({ message: "Booking created.", booking });
   } catch (error) {
     res.status(500).json({ message: "Unable to create booking.", error: error.message });
   }
 }
 
-async function confirmPayment(req, res) {
+async function createRazorpayOrder(req, res) {
   try {
-    const bookings = await readJson("bookings.json");
-    const booking = bookings.find((item) => item.id === req.params.id && item.userId === req.session.user.id);
+    const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ message: "Booking not found." });
-    if (booking.paymentStatus !== "Paid") {
-      booking.paymentStatus = "Paid";
-      booking.paidAt = new Date().toISOString();
-      booking.paymentProvider = "Demo";
+    if (booking.status === "confirmed") return res.json({ paid: true, booking });
+
+    // Mock Razorpay Order Creation if keys are placeholders
+    if (process.env.RAZORPAY_KEY_ID === "rzp_test_replace_me" || !process.env.RAZORPAY_KEY_ID) {
+        booking.orderId = `order_mock_${Date.now()}`;
+        await booking.save();
+        return res.json({ 
+            orderId: booking.orderId, 
+            amount: booking.totalAmount * 100,
+            currency: "INR",
+            mock: true
+        });
     }
-    await writeJson("bookings.json", bookings);
-    const receipt = await sendReceiptSafe(req.session.user, booking);
-    res.json({ message: "Payment successful.", booking, receipt });
+
+    const options = {
+      amount: booking.totalAmount * 100, // amount in smallest currency unit
+      currency: "INR",
+      receipt: booking._id.toString(),
+    };
+
+    const order = await razorpay.orders.create(options);
+    booking.orderId = order.id;
+    await booking.save();
+
+    res.json(order);
   } catch (error) {
-    res.status(500).json({ message: "Payment failed.", error: error.message });
+    res.status(500).json({ message: "Unable to create Razorpay order.", error: error.message });
   }
 }
 
-async function createStripeSession(req, res) {
+async function confirmRazorpayPayment(req, res) {
   try {
-    const bookings = await readJson("bookings.json");
-    const booking = bookings.find((item) => item.id === req.params.id && item.userId === req.session.user.id);
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, mock } = req.body;
+    
+    const booking = await Booking.findOne({ _id: req.params.id, user: req.session.user.id }).populate('show');
     if (!booking) return res.status(404).json({ message: "Booking not found." });
-    if (booking.paymentStatus === "Paid") return res.json({ paid: true, booking });
 
-    const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    if (mock) {
+        booking.status = "confirmed";
+        booking.paymentId = `pay_mock_${Date.now()}`;
+        await booking.save();
+        
+        // Update show seats
+        const show = await Show.findById(booking.show._id).populate('movie');
+        show.bookedSeats.push(...booking.seats);
+        await show.save();
 
-    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_SECRET_KEY.startsWith("sk_")) {
-      // Mock payment flow for fully working demo
-      booking.paymentProvider = "Demo";
-      await writeJson("bookings.json", bookings);
-      // Return a dummy url to just complete the payment immediately to avoid broken app
-      return res.json({ url: `${appUrl}/confirmation.html?booking=${booking.id}&session_id=mock_session_${Date.now()}`, sessionId: `mock_session_${Date.now()}` });
+        // Send Email
+        await sendBookingEmail(req.session.user, booking, show);
+        
+        return res.json({ message: "Mock Payment successful.", booking });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      client_reference_id: booking.id,
-      customer_email: req.session.user.email,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "inr",
-            unit_amount: booking.amount * 100,
-            product_data: {
-              name: `${booking.movieName} - ${booking.seats.join(", ")}`,
-              description: `Showtime: ${new Date(booking.showTime).toLocaleString("en-IN")}`
-            }
-          }
-        }
-      ],
-      metadata: { bookingId: booking.id, userId: req.session.user.id },
-      success_url: `${appUrl}/confirmation.html?booking=${booking.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/payment.html?id=${booking.id}&cancelled=1`
-    });
+    const generated_signature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .digest("hex");
 
-    booking.stripeSessionId = session.id;
-    booking.paymentProvider = "Stripe";
-    await writeJson("bookings.json", bookings);
-    res.json({ url: session.url, sessionId: session.id });
+    if (generated_signature !== razorpay_signature) {
+      return res.status(400).json({ message: "Invalid payment signature." });
+    }
+
+    booking.status = "confirmed";
+    booking.paymentId = razorpay_payment_id;
+    await booking.save();
+
+    // Update show seats
+    const show = await Show.findById(booking.show._id).populate('movie');
+    show.bookedSeats.push(...booking.seats);
+    await show.save();
+
+    // Send Email
+    await sendBookingEmail(req.session.user, booking, show);
+
+    res.json({ message: "Payment successful.", booking });
   } catch (error) {
-    res.status(500).json({ message: "Unable to start Stripe checkout.", error: error.message });
-  }
-}
-
-async function confirmStripePayment(req, res) {
-  try {
-    const { session_id: sessionId } = req.query;
-    if (!sessionId) return res.status(400).json({ message: "Stripe session id is required." });
-
-    if (sessionId.startsWith("mock_session_")) {
-      // Mock payment confirmed
-      const bookings = await readJson("bookings.json");
-      const booking = bookings.find((item) => item.id === req.params.id && item.userId === req.session.user.id);
-      if (!booking) return res.status(404).json({ message: "Booking not found." });
-
-      booking.paymentStatus = "Paid";
-      booking.paymentProvider = "Demo";
-      booking.stripeSessionId = sessionId;
-      booking.paidAt = new Date().toISOString();
-      await writeJson("bookings.json", bookings);
-      const receipt = await sendReceiptSafe(req.session.user, booking);
-      return res.json({ message: "Mock payment confirmed.", booking, receipt });
-    }
-
-    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_SECRET_KEY.startsWith("sk_")) {
-      return res.status(400).json({ message: "Stripe is not configured." });
-    }
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== "paid") {
-      return res.status(400).json({ message: "Stripe payment is not complete yet." });
-    }
-
-    const bookings = await readJson("bookings.json");
-    const booking = bookings.find((item) => item.id === req.params.id && item.userId === req.session.user.id);
-    if (!booking) return res.status(404).json({ message: "Booking not found." });
-    if (booking.stripeSessionId && booking.stripeSessionId !== sessionId) {
-      return res.status(409).json({ message: "Stripe session does not match this booking." });
-    }
-
-    booking.paymentStatus = "Paid";
-    booking.paymentProvider = "Stripe";
-    booking.stripeSessionId = sessionId;
-    booking.paidAt = new Date().toISOString();
-    await writeJson("bookings.json", bookings);
-    const receipt = await sendReceiptSafe(req.session.user, booking);
-    res.json({ message: "Stripe payment confirmed.", booking, receipt });
-  } catch (error) {
-    res.status(500).json({ message: "Unable to confirm Stripe payment.", error: error.message });
+    res.status(500).json({ message: "Payment confirmation failed.", error: error.message });
   }
 }
 
 async function getUserBookings(req, res) {
   try {
-    const bookings = await readJson("bookings.json");
-    res.json(bookings.filter((booking) => booking.userId === req.session.user.id).reverse());
+    const bookings = await Booking.find({ user: req.session.user.id })
+      .populate({
+          path: "show",
+          populate: {
+              path: "movie"
+          }
+      })
+      .sort({ createdAt: -1 });
+    res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: "Unable to load bookings.", error: error.message });
   }
 }
 
-async function sendReceiptSafe(user, booking) {
+async function sendBookingEmail(user, booking, show) {
+  const emailContent = `
+    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+      <div style="background-color: #f84464; color: #ffffff; padding: 20px; text-align: center;">
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 1px;">🎬 CineGo Ticket</h1>
+      </div>
+      <div style="padding: 30px; background-color: #ffffff;">
+        <h2 style="margin-top: 0; color: #333333; font-size: 20px;">Hi ${user.name}, your booking is confirmed! 🎉</h2>
+        <p style="color: #666666; font-size: 15px; line-height: 1.6;">Get ready for an amazing cinematic experience. Here are your official ticket details:</p>
+        
+        <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin: 25px 0; border: 1px dashed #cccccc;">
+          <h3 style="margin: 0 0 10px 0; color: #f84464; font-size: 18px;">${show.movie.title}</h3>
+          <p style="margin: 5px 0; color: #333333;"><strong>Theater:</strong> ${show.theaterName}</p>
+          <p style="margin: 5px 0; color: #333333;"><strong>Date & Time:</strong> ${new Date(show.time).toLocaleString()}</p>
+          <p style="margin: 5px 0; color: #333333;"><strong>Seats:</strong> ${booking.seats.join(", ")}</p>
+          <p style="margin: 15px 0 0 0; color: #000000; font-size: 18px;"><strong>Total Paid:</strong> ₹${booking.totalAmount}</p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${booking._id}" alt="Ticket QR Code" style="border: 4px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px;">
+          <p style="color: #888888; font-size: 12px; margin-top: 10px;">Scan at the entrance</p>
+        </div>
+      </div>
+      <div style="background-color: #f5f5f5; padding: 15px; text-align: center; color: #888888; font-size: 12px; border-top: 1px solid #eaeaea;">
+        © 2026 CineGo. Book Smarter, Watch Better.
+      </div>
+    </div>
+  `;
+
+  if (!process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_APP_PASSWORD === "your-app-password") {
+    console.log("--- MOCK EMAIL DELIVERED (MISSING GMAIL APP PASSWORD) ---");
+    console.log(`To: ${user.email}`);
+    console.log("Subject: Your CineGo Tickets are Confirmed!");
+    console.log("----------------------------");
+    return;
+  }
+
   try {
-    return await sendBookingReceipt(user, booking);
-  } catch (error) {
-    return { sent: false, error: error.message };
+    const info = await transporter.sendMail({
+      from: `"CineGo Tickets" <${process.env.GMAIL_USER}>`,
+      to: user.email,
+      subject: `Your CineGo Tickets: ${show.movie.title}`,
+      html: emailContent
+    });
+    console.log("Ticket email sent successfully to", user.email, "| Message ID:", info.messageId);
+  } catch (err) {
+    console.error("Failed to send ticket email via Gmail:", err.message);
   }
 }
 
-module.exports = { bookedSeats, createBooking, confirmPayment, createStripeSession, confirmStripePayment, getUserBookings };
+module.exports = { bookedSeats, createBooking, createRazorpayOrder, confirmRazorpayPayment, getUserBookings };

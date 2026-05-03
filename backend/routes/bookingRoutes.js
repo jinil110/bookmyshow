@@ -1,12 +1,11 @@
 const router = require("express").Router();
 const { requireAuth } = require("../middleware/auth");
-const { bookedSeats, createBooking, confirmPayment, createStripeSession, confirmStripePayment, getUserBookings } = require("../controllers/bookingController");
+const { bookedSeats, createBooking, createRazorpayOrder, confirmRazorpayPayment, getUserBookings } = require("../controllers/bookingController");
 
-router.get("/movies/:movieId/seats", bookedSeats);
+router.get("/shows/:showId/seats", bookedSeats);
 router.post("/book", requireAuth, createBooking);
-router.post("/book/:id/pay", requireAuth, confirmPayment);
-router.post("/book/:id/stripe-session", requireAuth, createStripeSession);
-router.get("/book/:id/stripe-confirm", requireAuth, confirmStripePayment);
+router.post("/book/:id/razorpay-order", requireAuth, createRazorpayOrder);
+router.post("/book/:id/razorpay-confirm", requireAuth, confirmRazorpayPayment);
 router.get("/user/bookings", requireAuth, getUserBookings);
 
 module.exports = router;

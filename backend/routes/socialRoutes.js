@@ -5,6 +5,7 @@ const { getReviews, addReview, getWatchlist, toggleWatchlist } = require("../con
 router.get("/movies/:movieId/reviews", getReviews);
 router.post("/movies/:movieId/reviews", requireAuth, addReview);
 router.get("/user/watchlist", requireAuth, getWatchlist);
-router.post("/watchlist/:movieId", requireAuth, toggleWatchlist);
+router.post("/movies/:movieId/watchlist", requireAuth, toggleWatchlist);
+
 
 module.exports = router;
