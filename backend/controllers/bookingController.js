@@ -3,19 +3,11 @@ const Show = require("../models/Show");
 const Movie = require("../models/Movie");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
-const nodemailer = require("nodemailer");
+const { sendBookingReceipt } = require("../utils/emailService");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_replace_me",
   key_secret: process.env.RAZORPAY_KEY_SECRET || "rzp_secret_replace_me",
-});
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER || "your-email@gmail.com",
-    pass: process.env.GMAIL_APP_PASSWORD || "your-app-password",
-  },
 });
 
 async function bookedSeats(req, res) {
@@ -31,7 +23,7 @@ async function bookedSeats(req, res) {
 
 async function createBooking(req, res) {
   try {
-    const { showId, seats } = req.body;
+    const { showId, seats, timezone } = req.body;
     if (!showId || !Array.isArray(seats) || seats.length === 0) {
       return res.status(400).json({ message: "Show and seats are required." });
     }
@@ -52,6 +44,7 @@ async function createBooking(req, res) {
       seats,
       totalAmount: amount,
       status: "pending",
+      userTimezone: timezone || "Asia/Kolkata",
     });
 
     res.status(201).json({ message: "Booking created.", booking });
@@ -161,6 +154,12 @@ async function getUserBookings(req, res) {
 }
 
 async function sendBookingEmail(user, booking, show) {
+  const timezone = booking.userTimezone || "Asia/Kolkata";
+  const showTime = new Date(show.time).toLocaleString("en-IN", {
+    timeZone: timezone,
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
   const emailContent = `
     <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
       <div style="background-color: #f84464; color: #ffffff; padding: 20px; text-align: center;">
@@ -173,7 +172,8 @@ async function sendBookingEmail(user, booking, show) {
         <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin: 25px 0; border: 1px dashed #cccccc;">
           <h3 style="margin: 0 0 10px 0; color: #f84464; font-size: 18px;">${show.movie.title}</h3>
           <p style="margin: 5px 0; color: #333333;"><strong>Theater:</strong> ${show.theaterName}</p>
-          <p style="margin: 5px 0; color: #333333;"><strong>Date & Time:</strong> ${new Date(show.time).toLocaleString()}</p>
+          <p style="margin: 5px 0; color: #333333;"><strong>Location:</strong> ${show.theaterName}, ${show.area || ""} ${show.city || ""}</p>
+          <p style="margin: 5px 0; color: #333333;"><strong>Date & Time:</strong> ${showTime} (${timezone})</p>
           <p style="margin: 5px 0; color: #333333;"><strong>Seats:</strong> ${booking.seats.join(", ")}</p>
           <p style="margin: 15px 0 0 0; color: #000000; font-size: 18px;"><strong>Total Paid:</strong> ₹${booking.totalAmount}</p>
         </div>
@@ -189,24 +189,27 @@ async function sendBookingEmail(user, booking, show) {
     </div>
   `;
 
-  if (!process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_APP_PASSWORD === "your-app-password") {
-    console.log("--- MOCK EMAIL DELIVERED (MISSING GMAIL APP PASSWORD) ---");
-    console.log(`To: ${user.email}`);
-    console.log("Subject: Your CineGo Tickets are Confirmed!");
-    console.log("----------------------------");
-    return;
-  }
-
   try {
-    const info = await transporter.sendMail({
-      from: `"CineGo Tickets" <${process.env.GMAIL_USER}>`,
-      to: user.email,
-      subject: `Your CineGo Tickets: ${show.movie.title}`,
-      html: emailContent
-    });
-    console.log("Ticket email sent successfully to", user.email, "| Message ID:", info.messageId);
+    const receipt = {
+      movieName: show.movie.title,
+      seats: booking.seats,
+      showTime: show.time,
+      amount: booking.totalAmount,
+      paymentStatus: booking.status,
+    };
+    const result = await sendBookingReceipt(user, receipt, emailContent);
+    if (!result.sent) {
+      console.log("--- MOCK EMAIL DELIVERED (NO PROVIDER CONFIGURED) ---");
+      console.log(`To: ${user.email}`);
+      console.log(`Subject: CineGo receipt for ${show.movie.title}`);
+      console.log("----------------------------");
+      return;
+    }
+    console.log(
+      `Ticket email sent successfully to ${user.email} via ${result.provider}.`
+    );
   } catch (err) {
-    console.error("Failed to send ticket email via Gmail:", err.message);
+    console.error("Failed to send ticket email:", err.message);
   }
 }
 

@@ -31,6 +31,10 @@ const bookingSchema = new mongoose.Schema(
     orderId: {
       type: String,
     },
+    userTimezone: {
+      type: String,
+      default: "Asia/Kolkata",
+    },
   },
   { timestamps: true }
 );

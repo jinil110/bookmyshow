@@ -37,7 +37,11 @@ async function getMovie(req, res) {
     if (!movie) return res.status(404).json({ message: "Movie not found." });
     
     // Fetch shows for this movie
-    const shows = await Show.find({ movie: movie._id }).sort({ date: 1, time: 1 });
+    const showQuery = { movie: movie._id };
+    if (req.query.city) {
+      showQuery.city = req.query.city;
+    }
+    const shows = await Show.find(showQuery).sort({ date: 1, time: 1 });
     
     // Group shows by date to mimic BookMyShow
     const showtimes = {};
@@ -54,4 +58,14 @@ async function getMovie(req, res) {
   }
 }
 
-module.exports = { getMovies, getMovie };
+async function getCities(req, res) {
+  try {
+    const cities = await Show.distinct("city");
+    const cleaned = cities.filter(Boolean).sort((a, b) => a.localeCompare(b));
+    res.json(cleaned);
+  } catch (error) {
+    res.status(500).json({ message: "Unable to load cities.", error: error.message });
+  }
+}
+
+module.exports = { getMovies, getMovie, getCities };

@@ -45,6 +45,10 @@ app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
 });
 
+app.get("/healthz", (_req, res) => {
+  res.status(200).json({ ok: true, service: "cinego" });
+});
+
 app.use("/api/*", (_req, res) => {
   res.status(404).json({ message: "API route not found" });
 });

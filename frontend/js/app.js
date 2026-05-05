@@ -5,6 +5,8 @@
 // ─── Utilities ───────────────────────────────
 const $ = id => document.getElementById(id);
 const PAGE = document.body.dataset.page;
+const CITY_KEY = 'cinego_selected_city';
+const DEFAULT_CITIES = ['Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Ahmedabad'];
 
 // User's real timezone
 const USER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -46,7 +48,10 @@ async function api(path, opts = {}) {
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
-  const data = await res.json().catch(() => ({}));
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? await res.json().catch(() => ({}))
+    : {};
   if (!res.ok) throw new Error(data.message || 'Request failed');
   return data;
 }
@@ -54,11 +59,23 @@ async function api(path, opts = {}) {
 // ─── Navbar ──────────────────────────────────
 async function renderNav() {
   let user = null;
+  let cities = [];
+  const selectedCity = localStorage.getItem(CITY_KEY) || 'Mumbai';
   try { const d = await api('/auth/me'); user = d.user; } catch (e) { /* not logged in */ }
+  try { cities = await api('/cities'); } catch (e) { cities = []; }
+  const allCities = cities.length ? cities : DEFAULT_CITIES;
+  const cityOptions = allCities
+    .map(city => `<option value="${city}" ${selectedCity === city ? 'selected' : ''}>${city}</option>`)
+    .join('');
   const nav = $('navbar');
   nav.innerHTML = `
     <div class="nav-inner">
       <a class="nav-logo" href="/">🎬 CineGo</a>
+      <div class="city-picker-wrap">
+        <label for="citySelect" class="city-label">City</label>
+        <select id="citySelect" class="city-select" aria-label="Select city">${cityOptions}</select>
+        <button id="detectCityBtn" class="detect-city-btn" title="Detect nearest city" aria-label="Detect nearest city">📍</button>
+      </div>
       <nav class="nav-links">
         <a href="index.html">Home</a>
         ${user ? `
@@ -71,11 +88,93 @@ async function renderNav() {
       </nav>
     </div>
   `;
+  const citySelect = $('citySelect');
+  if (citySelect) {
+    citySelect.addEventListener('change', () => {
+      localStorage.setItem(CITY_KEY, citySelect.value);
+      if (PAGE === 'movie') {
+        initMovie();
+        return;
+      }
+      location.reload();
+    });
+  }
+  $('detectCityBtn')?.addEventListener('click', async () => {
+    const detected = await detectNearestCity(allCities);
+    if (!detected) {
+      toast('Could not detect city. Select manually.', 'info');
+      return;
+    }
+    localStorage.setItem(CITY_KEY, detected);
+    if (citySelect) citySelect.value = detected;
+    toast(`Location detected: ${detected}`, 'success');
+    setTimeout(() => location.reload(), 350);
+  });
   if (user) {
     $('logoutBtn').onclick = async () => {
       await api('/auth/logout', { method: 'POST' });
       window.location.href = '/';
     };
+  }
+}
+
+function cityAliases(name) {
+  return (name || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z]/g, '');
+}
+
+function matchCityFromText(text, cities) {
+  const normalizedText = cityAliases(text);
+  for (const city of cities) {
+    const normalizedCity = cityAliases(city);
+    if (normalizedText.includes(normalizedCity)) return city;
+    if (normalizedCity === 'bengaluru' && normalizedText.includes('bangalore')) return city;
+  }
+  return null;
+}
+
+function guessCityByTimezone(cities) {
+  const tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '').toLowerCase();
+  const byTz = {
+    'asia/kolkata': 'Mumbai'
+  };
+  const guess = byTz[tz];
+  return guess && cities.includes(guess) ? guess : null;
+}
+
+async function detectNearestCity(cities) {
+  if (!cities.length) return null;
+
+  // Fast fallback before geolocation prompts.
+  const localeGuess = matchCityFromText(navigator.language || '', cities);
+  if (localeGuess) return localeGuess;
+  const tzGuess = guessCityByTimezone(cities);
+  if (tzGuess) return tzGuess;
+
+  if (!navigator.geolocation) return null;
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 6000,
+        maximumAge: 300000
+      });
+    });
+
+    const { latitude, longitude } = position.coords;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const areaText = [
+      data?.address?.city,
+      data?.address?.town,
+      data?.address?.state_district,
+      data?.address?.state,
+      data?.display_name
+    ].filter(Boolean).join(' ');
+    return matchCityFromText(areaText, cities);
+  } catch (_err) {
+    return null;
   }
 }
 
@@ -104,6 +203,22 @@ function movieCardHTML(m) {
 function hideLoader() {
   const l = $('loader');
   if (l) { l.classList.add('hidden'); }
+}
+
+// ─── Smooth reveal animations ─────────────────
+function initRevealAnimations() {
+  const items = document.querySelectorAll('.reveal');
+  if (!items.length) return;
+
+  const observer = new IntersectionObserver((entries, obs) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('visible');
+      obs.unobserve(entry.target);
+    });
+  }, { threshold: 0.15 });
+
+  items.forEach(el => observer.observe(el));
 }
 
 // ══════════════════════════════════════════════
@@ -163,7 +278,9 @@ function renderHero(m) {
 
   if (bg) bg.style.backgroundImage = `url('${m.banner || m.poster}')`;
   if (title) title.textContent = m.title;
-  if (desc) desc.textContent = m.description?.substring(0, 160) + '...';
+  if (desc) desc.textContent = m.description
+    ? `${m.description.substring(0, 160)}...`
+    : 'Book premium seats, skip queues, and enjoy seamless movie nights.';
   if (btn) btn.href = `movie.html?id=${m._id || m.id}`;
   if (meta) meta.innerHTML = `
     <span><span class="rating-badge">${m.rating}</span></span>
@@ -180,6 +297,9 @@ function renderMovieGrid(movies) {
     return;
   }
   grid.innerHTML = movies.map(movieCardHTML).join('');
+  grid.querySelectorAll('.movie-card').forEach((card, index) => {
+    card.style.animationDelay = `${Math.min(index * 70, 600)}ms`;
+  });
 }
 
 // ══════════════════════════════════════════════
@@ -188,9 +308,10 @@ function renderMovieGrid(movies) {
 async function initMovie() {
   const id = new URLSearchParams(location.search).get('id');
   if (!id) { location.href = '/'; return; }
+  const city = localStorage.getItem(CITY_KEY) || 'Mumbai';
 
   let data;
-  try { data = await api(`/movies/${id}`); }
+  try { data = await api(`/movies/${id}?city=${encodeURIComponent(city)}`); }
   catch (e) { toast('Movie not found', 'error'); hideLoader(); return; }
 
   const { movie, showtimes } = data;
@@ -225,7 +346,7 @@ async function initMovie() {
   });
 
   // Showtimes — BookMyShow style
-  renderShowtimes(showtimes, movie);
+  renderShowtimes(showtimes, movie, city);
 
   // Reviews
   loadReviews(id);
@@ -233,7 +354,7 @@ async function initMovie() {
   hideLoader();
 }
 
-function renderShowtimes(showtimes, movie) {
+function renderShowtimes(showtimes, movie, city) {
   const dateTabs = $('dateTabs');
   const theaterShows = $('theaterShows');
   if (!dateTabs || !theaterShows) return;
@@ -262,13 +383,15 @@ function renderShowtimes(showtimes, movie) {
   const renderShowsForDate = (date) => {
     const shows = showtimes[date] || [];
     // Group by theater
-    const byTheater = {};
+      const byTheater = {};
     shows.forEach(show => {
-      if (!byTheater[show.theaterName]) byTheater[show.theaterName] = [];
-      byTheater[show.theaterName].push(show);
+      const key = `${show.theaterName}||${show.area || ''}`;
+      if (!byTheater[key]) byTheater[key] = [];
+      byTheater[key].push(show);
     });
 
-    theaterShows.innerHTML = Object.entries(byTheater).map(([theater, tShows]) => {
+    theaterShows.innerHTML = Object.entries(byTheater).map(([key, tShows]) => {
+      const [theater, area] = key.split('||');
       const slots = tShows.map(s => {
         const isPast = new Date(s.time) < new Date();
         return `
@@ -284,6 +407,7 @@ function renderShowtimes(showtimes, movie) {
       return `
         <div class="theater-block">
           <div class="theater-name">${theater}</div>
+          <p class="theater-sub">${area ? `${area}, ` : ''}${city} • ${USER_TZ}</p>
           <div class="time-slots">${slots}</div>
         </div>
       `;
@@ -363,10 +487,10 @@ async function initSeats() {
     $('seatMeta').textContent = `Show ID: ${showId} • ${USER_TZ}`;
   } catch (e) { /* skip */ }
 
+  const basicPrice = 180;
   const premiumPrice = 300;
-  const standardPrice = 200;
+  $('basicPrice').textContent = basicPrice;
   $('premiumPrice').textContent = premiumPrice;
-  $('standardPrice').textContent = standardPrice;
 
   const selectedSeats = new Set();
 
@@ -399,8 +523,8 @@ async function initSeats() {
     });
   };
 
-  renderSeats('seatGridPremium', ['A', 'B'], premiumPrice, 'premium');
-  renderSeats('seatGridStandard', ['C', 'D', 'E', 'F'], standardPrice, '');
+  renderSeats('seatGridBasic', ['A', 'B', 'C', 'D'], basicPrice, '');
+  renderSeats('seatGridPremium', ['E', 'F'], premiumPrice, 'premium');
 
   const summaryBar = $('seatSummary');
   const proceedBtn = $('proceedBtn');
@@ -408,7 +532,7 @@ async function initSeats() {
   const updateSummary = () => {
     let total = 0;
     selectedSeats.forEach(seat => {
-      total += seat.startsWith('A') || seat.startsWith('B') ? premiumPrice : standardPrice;
+      total += seat.startsWith('E') || seat.startsWith('F') ? premiumPrice : basicPrice;
     });
     $('selectedSeatsLabel').textContent = selectedSeats.size
       ? `${selectedSeats.size} seat(s): ${[...selectedSeats].join(', ')}`
@@ -425,7 +549,7 @@ async function initSeats() {
       if (!user) { toast('Please login first', 'error'); location.href = 'login.html'; return; }
       const d = await api('/book', {
         method: 'POST',
-        body: { showId, seats: [...selectedSeats] }
+        body: { showId, seats: [...selectedSeats], timezone: USER_TZ }
       });
       location.href = `payment.html?bookingId=${d.booking._id}`;
     } catch (e) {
@@ -562,6 +686,9 @@ async function initConfirmation() {
         <div class="summary-row"><span class="label">Seats</span><span class="value">${(booking.seats || []).join(', ')}</span></div>
         <div class="summary-row total"><span class="label">Total Paid</span><span class="value">₹${booking.totalAmount}</span></div>
       </div>
+      <p style="color: var(--success); font-weight: 600; margin-top: 20px;">
+        ✉️ A booking confirmation has been sent to your email inbox.
+      </p>
     `;
   } catch (e) { /* skip */ }
   hideLoader();
@@ -669,6 +796,7 @@ function initRegister() {
 // ══════════════════════════════════════════════
 async function main() {
   await renderNav();
+  initRevealAnimations();
   switch (PAGE) {
     case 'home':         await initHome(); break;
     case 'movie':        await initMovie(); break;

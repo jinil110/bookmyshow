@@ -1,21 +1,21 @@
 # CineGo - BookMyShow-like Web App
-**“This is a demo project. Payments are simulated and no real transactions are processed.”**
-A complete movie ticket booking application built with HTML5, CSS3, vanilla JavaScript, Node.js, Express.js, bcrypt, express-session, and JSON-file persistence.
+**This is a demo project. Payments can run in mock mode if keys are not configured.**
+
+A complete movie ticket booking application built with HTML5, CSS3, vanilla JavaScript, Node.js, Express.js, MongoDB, bcrypt, and express-session.
 
 ## Features
 
 - User registration, login, logout, and session authentication
 - Password hashing with bcrypt
-- Movies stored in `data/movies.json`
-- Users stored in `data/users.json`
-- Bookings stored in `data/bookings.json`
+- MongoDB persistence with Mongoose models
 - Movie search and category filtering
 - Movie details, booking flow, seat selection, fake payment, and confirmation pages
 - User profile with previous booking history
-- Email receipts using Resend or SendGrid when keys are configured
+- Email receipts using Resend/SendGrid/Gmail when keys are configured
 - Admin panel for movie and showtime CRUD
 - Per-movie reviews and user watchlist
-- Stripe Checkout integration through the `stripe` npm package
+- City-based theater selection with auto-detect location option
+- Real timezone-aware showtime and booking confirmations
 - Frontend and backend validation
 - Toast notifications, loader, hover effects, active navbar states, responsive design
 - 404 error page
@@ -47,18 +47,26 @@ Admin access:
 - Register using that same email
 - The navbar will show the Admin page
 
-Stripe:
+Required:
 
-- Add a real test key from [dashboard.stripe.com](https://dashboard.stripe.com): `STRIPE_SECRET_KEY=sk_test_...`
-- Set `APP_URL=http://localhost:3000`
-- Use "Pay with Stripe" on the payment page
+- `MONGO_URI`
+- `SESSION_SECRET`
 
-- Payments are simulated and no real transactions are processed.”**
+Payments (Razorpay):
 
-Email receipts:
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- If keys are not set, mock mode is used for test flow.
 
-- Use either `RESEND_API_KEY` or `SENDGRID_API_KEY`
-- Set `EMAIL_FROM` to a verified sender for your provider
+Email receipts (choose one provider):
+
+- Resend: `RESEND_API_KEY` + `EMAIL_FROM`
+- SendGrid: `SENDGRID_API_KEY` + verified sender in `EMAIL_FROM`
+- Gmail fallback: `GMAIL_USER` + `GMAIL_APP_PASSWORD`
+
+Health route:
+
+- `GET /healthz`
 
 ## Main API Routes
 
@@ -66,10 +74,11 @@ Email receipts:
 - `POST /login` or `POST /api/login`
 - `POST /logout` or `POST /api/logout`
 - `GET /movies` or `GET /api/movies`
+- `GET /cities` or `GET /api/cities`
 - `POST /book` or `POST /api/book`
 - `GET /user/bookings` or `GET /api/user/bookings`
-- `POST /book/:id/stripe-session` or `POST /api/book/:id/stripe-session`
-- `GET /book/:id/stripe-confirm` or `GET /api/book/:id/stripe-confirm`
+- `POST /book/:id/razorpay-order` or `POST /api/book/:id/razorpay-order`
+- `POST /book/:id/razorpay-confirm` or `POST /api/book/:id/razorpay-confirm`
 - `GET /movies/:movieId/reviews` or `GET /api/movies/:movieId/reviews`
 - `POST /movies/:movieId/reviews` or `POST /api/movies/:movieId/reviews`
 - `GET /user/watchlist` or `GET /api/user/watchlist`
@@ -89,9 +98,6 @@ backend/
   utils/
   server.js
 data/
-  users.json
-  movies.json
-  bookings.json
 frontend/
   css/
   js/

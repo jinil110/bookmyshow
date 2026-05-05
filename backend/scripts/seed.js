@@ -109,6 +109,50 @@ const seedData = async () => {
         banner: "https://image.tmdb.org/t/p/original/fqv8v6AycXKsivp1T5yKtLbGXce.jpg",
         isTrending: false,
         isLatest: true,
+      },
+      {
+        title: "Furiosa: A Mad Max Saga",
+        description: "As the world falls, young Furiosa is snatched from the Green Place and survives many trials while plotting her way back home.",
+        duration: "2h 28m",
+        rating: "A",
+        category: "Action",
+        poster: "https://image.tmdb.org/t/p/w500/iADOJ8Zymht2JPMoy3R7xceZprc.jpg",
+        banner: "https://image.tmdb.org/t/p/original/ssF2VZJdJ0xL3QfQ8WfQmR0jScD.jpg",
+        isTrending: true,
+        isLatest: true,
+      },
+      {
+        title: "The Fall Guy",
+        description: "A stuntman must track down a missing movie star while trying to win back the love of his life.",
+        duration: "2h 6m",
+        rating: "UA",
+        category: "Comedy",
+        poster: "https://image.tmdb.org/t/p/w500/tSz1qsmSJon0rqjHBxXZmrotuse.jpg",
+        banner: "https://image.tmdb.org/t/p/original/s5znBQmprDJJ553IMQfwEVlfroH.jpg",
+        isTrending: false,
+        isLatest: true,
+      },
+      {
+        title: "A Quiet Place: Day One",
+        description: "Witness the terrifying beginning of the invasion as New York City descends into silence.",
+        duration: "1h 40m",
+        rating: "UA",
+        category: "Horror",
+        poster: "https://image.tmdb.org/t/p/w500/hU42CRk14JuPEdqZG3AWmagiPAP.jpg",
+        banner: "https://image.tmdb.org/t/p/original/86T3Y4Q0nFhtp7WJf6n9Y2VCxA6.jpg",
+        isTrending: true,
+        isLatest: true,
+      },
+      {
+        title: "Challengers",
+        description: "A former tennis prodigy turned coach puts her husband into a challenger event where he faces his old best friend.",
+        duration: "2h 11m",
+        rating: "A",
+        category: "Drama",
+        poster: "https://image.tmdb.org/t/p/w500/H6vke7zGiuLsz4v4RPeReb9rsv.jpg",
+        banner: "https://image.tmdb.org/t/p/original/1XDDXPXGiI8id7MrUxK36ke7gkX.jpg",
+        isTrending: false,
+        isLatest: true,
       }
     ];
 
@@ -121,7 +165,33 @@ const seedData = async () => {
       return d.toISOString().split("T")[0];
     });
 
-    const theaters = ["PVR: Phoenix Palladium", "INOX: R-City Mall", "Cinépolis: Fun Republic", "PVR: Juhu"];
+    const cityTheaters = {
+      Mumbai: [
+        { theaterName: "PVR: Phoenix Palladium", area: "Lower Parel" },
+        { theaterName: "INOX: R-City Mall", area: "Ghatkopar" },
+        { theaterName: "PVR: Juhu", area: "Juhu" }
+      ],
+      Delhi: [
+        { theaterName: "PVR: Select Citywalk", area: "Saket" },
+        { theaterName: "INOX: Nehru Place", area: "Nehru Place" },
+        { theaterName: "Cinépolis: DLF Avenue", area: "Saket" }
+      ],
+      Bengaluru: [
+        { theaterName: "PVR: Orion Mall", area: "Rajajinagar" },
+        { theaterName: "INOX: Garuda Mall", area: "Magrath Road" },
+        { theaterName: "Cinépolis: Royal Meenakshi", area: "Bannerghatta" }
+      ],
+      Hyderabad: [
+        { theaterName: "AMB Cinemas", area: "Gachibowli" },
+        { theaterName: "PVR: Nexus Mall", area: "Kukatpally" },
+        { theaterName: "INOX: GVK One", area: "Banjara Hills" }
+      ],
+      Ahmedabad: [
+        { theaterName: "PVR: Acropolis Mall", area: "Thaltej" },
+        { theaterName: "INOX: Himalaya Mall", area: "Drive In Road" },
+        { theaterName: "Cinépolis: Alpha One", area: "Vastrapur" }
+      ]
+    };
     const timesUTC = [
       { h: 4, m: 30 },  // 10:00 AM IST
       { h: 8, m: 0 },   // 1:30 PM IST
@@ -133,19 +203,23 @@ const seedData = async () => {
     const shows = [];
     for (const movie of insertedMovies) {
       for (const dateStr of days) {
-        const theaterPair = theaters.slice(0, 2); // 2 theaters per movie
-        for (const theater of theaterPair) {
+        for (const [city, theaters] of Object.entries(cityTheaters)) {
+          const theaterPair = theaters.slice(0, 2);
+          for (const theater of theaterPair) {
           for (let t = 0; t < timesUTC.length; t++) {
             const showDate = new Date(dateStr + "T00:00:00.000Z");
             showDate.setUTCHours(timesUTC[t].h, timesUTC[t].m, 0, 0);
             shows.push({
               movie: movie._id,
-              theaterName: theater,
+              theaterName: theater.theaterName,
+              area: theater.area,
+              city,
               date: dateStr,
               time: showDate.toISOString(),
               price: prices[t],
             });
           }
+        }
         }
       }
     }
