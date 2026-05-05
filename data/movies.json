@@ -7,7 +7,7 @@
     "rating": "UA",
     "category": "Action",
     "price": 220,
-    "showtimes": ["2026-05-01T18:30", "2026-05-01T21:30", "2026-05-02T15:00"],
+    "showtimes": ["2026-05-01T18:30", "2026-05-01T21:30", "2026-05-02T15:00", "2026-05-02T18:00", "2026-05-03T14:30"],
     "poster": "https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?auto=format&fit=crop&w=800&q=80",
     "banner": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1600&q=80"
   },
@@ -19,7 +19,7 @@
     "rating": "U",
     "category": "Romance",
     "price": 180,
-    "showtimes": ["2026-05-01T17:00", "2026-05-02T19:45"],
+    "showtimes": ["2026-05-01T17:00", "2026-05-02T19:45", "2026-05-03T11:00", "2026-05-03T14:15", "2026-05-04T18:00"],
     "poster": "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=800&q=80",
     "banner": "https://images.unsplash.com/photo-1505686994434-e3cc5abf1330?auto=format&fit=crop&w=1600&q=80"
   },
@@ -31,7 +31,7 @@
     "rating": "U",
     "category": "Comedy",
     "price": 160,
-    "showtimes": ["2026-05-01T16:15", "2026-05-02T20:00"],
+    "showtimes": ["2026-05-01T16:15", "2026-05-02T20:00", "2026-05-03T12:00", "2026-05-03T15:30", "2026-05-04T19:00"],
     "poster": "https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&w=800&q=80",
     "banner": "https://images.unsplash.com/photo-1499364615650-ec38552f4f34?auto=format&fit=crop&w=1600&q=80"
   },
@@ -43,8 +43,35 @@
     "rating": "UA",
     "category": "Sci-Fi",
     "price": 260,
-    "showtimes": ["2026-05-01T20:30", "2026-05-02T22:00"],
+    "showtimes": ["2026-05-01T20:30", "2026-05-02T22:00", "2026-05-03T18:30", "2026-05-03T21:00", "2026-05-04T20:30"],
     "poster": "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=800&q=80",
     "banner": "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=1600&q=80"
+  },
+  {
+    "id": "m5",
+    "title": "Neon Nights",
+    "description": "An investigative journalist dives deep into a cyber-punk city's underbelly to uncover a massive conspiracy.",
+    "duration": "2h 10m",
+    "rating": "A",
+    "category": "Thriller",
+    "price": 250,
+    "showtimes": ["2026-05-01T19:00", "2026-05-02T21:30", "2026-05-03T15:00", "2026-05-03T19:30", "2026-05-04T21:00"],
+    "poster": "https://images.unsplash.com/photo-1555680202-c86f0e12f086?auto=format&fit=crop&w=800&q=80",
+    "banner": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80",
+    "isLatest": true,
+    "isTrending": true
+  },
+  {
+    "id": "m6",
+    "title": "Desert Winds",
+    "description": "An epic historical drama following a nomadic tribe's journey across the great dunes.",
+    "duration": "3h 05m",
+    "rating": "UA",
+    "category": "Drama",
+    "price": 200,
+    "showtimes": ["2026-05-01T14:00", "2026-05-02T16:45", "2026-05-03T10:00", "2026-05-03T13:30", "2026-05-04T17:00"],
+    "poster": "https://images.unsplash.com/photo-1544365558-35aa4afcf11f?auto=format&fit=crop&w=800&q=80",
+    "banner": "https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=1600&q=80",
+    "isLatest": true
   }
 ]

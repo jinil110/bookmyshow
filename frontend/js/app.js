@@ -355,9 +355,8 @@ async function initMovie() {
 }
 
 function renderShowtimes(showtimes, movie, city) {
-  const dateTabs = $('dateTabs');
   const theaterShows = $('theaterShows');
-  if (!dateTabs || !theaterShows) return;
+  if (!theaterShows) return;
 
   const dates = Object.keys(showtimes || {}).sort();
   if (!dates.length) {
@@ -365,64 +364,43 @@ function renderShowtimes(showtimes, movie, city) {
     return;
   }
 
-  // Render date tabs
-  dateTabs.innerHTML = dates.map((d, i) => {
-    const dateObj = new Date(d + 'T00:00:00');
-    const day = dateObj.toLocaleDateString([], { weekday: 'short' });
-    const num = dateObj.getDate();
-    const mon = dateObj.toLocaleDateString([], { month: 'short' });
-    return `
-      <div class="date-tab ${i === 0 ? 'active' : ''}" data-date="${d}">
-        <div class="day">${day}</div>
-        <div class="date-num">${num}</div>
-        <div class="month">${mon}</div>
-      </div>
-    `;
-  }).join('');
+  let allShows = [];
+  dates.forEach(d => {
+    allShows = allShows.concat(showtimes[d]);
+  });
 
-  const renderShowsForDate = (date) => {
-    const shows = showtimes[date] || [];
-    // Group by theater
-      const byTheater = {};
-    shows.forEach(show => {
-      const key = `${show.theaterName}||${show.area || ''}`;
-      if (!byTheater[key]) byTheater[key] = [];
-      byTheater[key].push(show);
-    });
+  // Group by theater
+  const byTheater = {};
+  allShows.forEach(show => {
+    const key = `${show.theaterName}||${show.area || ''}`;
+    if (!byTheater[key]) byTheater[key] = [];
+    byTheater[key].push(show);
+  });
 
-    theaterShows.innerHTML = Object.entries(byTheater).map(([key, tShows]) => {
-      const [theater, area] = key.split('||');
-      const slots = tShows.map(s => {
-        const isPast = new Date(s.time) < new Date();
-        return `
-          <div class="time-slot ${isPast ? 'past' : ''}"
-            data-show-id="${s._id}"
-            data-price="${s.price}"
-            ${isPast ? '' : `onclick="window.location='seats.html?showId=${s._id}&movie=${movie._id}'"` }>
-            ${fmtTime(s.time)}
-            <br><small style="font-size:0.65rem;opacity:0.7">₹${s.price}</small>
-          </div>
-        `;
-      }).join('');
+  theaterShows.innerHTML = Object.entries(byTheater).map(([key, tShows]) => {
+    const [theater, area] = key.split('||');
+    const slots = tShows.map(s => {
+      const isPast = new Date(s.time) < new Date();
+      // Show date and time since we combined them
+      const dateStr = new Date(s.time).toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: USER_TZ });
       return `
-        <div class="theater-block">
-          <div class="theater-name">${theater}</div>
-          <p class="theater-sub">${area ? `${area}, ` : ''}${city} • ${USER_TZ}</p>
-          <div class="time-slots">${slots}</div>
+        <div class="time-slot ${isPast ? 'past' : ''}"
+          data-show-id="${s._id}"
+          data-price="${s.price}"
+          ${isPast ? '' : `onclick="window.location='seats.html?showId=${s._id}&movie=${movie._id}'"` }>
+          ${dateStr} <br/> ${fmtTime(s.time)}
+          <br><small style="font-size:0.65rem;opacity:0.7">₹${s.price}</small>
         </div>
       `;
     }).join('');
-  };
-
-  renderShowsForDate(dates[0]);
-
-  dateTabs.querySelectorAll('.date-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      dateTabs.querySelectorAll('.date-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      renderShowsForDate(tab.dataset.date);
-    });
-  });
+    return `
+      <div class="theater-block">
+        <div class="theater-name">${theater}</div>
+        <p class="theater-sub">${area ? `${area}, ` : ''}${city} • ${USER_TZ}</p>
+        <div class="time-slots">${slots}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 async function loadReviews(movieId) {
