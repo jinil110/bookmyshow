@@ -1,4 +1,5 @@
-const User = require("../models/User");
+const bcrypt = require("bcrypt");
+const { readCollection, writeCollection, makeId } = require("../data/store");
 
 function publicUser(user) {
   return { id: user._id, name: user.name, email: user.email, role: user.role || "user", createdAt: user.createdAt };
@@ -15,18 +16,25 @@ async function register(req, res) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const userExists = await User.findOne({ email: normalizedEmail });
+    const users = await readCollection("users");
+    const userExists = users.find((u) => String(u.email || "").toLowerCase() === normalizedEmail);
     if (userExists) {
       return res.status(409).json({ message: "Email is already registered." });
     }
 
     const role = normalizedEmail === String(process.env.ADMIN_EMAIL || "admin@example.com").toLowerCase() ? "admin" : "user";
-    const user = await User.create({
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = {
+      _id: makeId("user"),
       name: name.trim(),
       email: normalizedEmail,
-      password,
-      role
-    });
+      password: passwordHash,
+      role,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    users.push(user);
+    await writeCollection("users", users);
 
     req.session.user = publicUser(user);
     res.status(201).json({ message: "Registration successful.", user: req.session.user });
@@ -40,8 +48,10 @@ async function login(req, res) {
     const { email, password } = req.body;
     const normalizedEmail = String(email || "").trim().toLowerCase();
     
-    const user = await User.findOne({ email: normalizedEmail });
-    if (!user || !(await user.matchPassword(password || ""))) {
+    const users = await readCollection("users");
+    const user = users.find((u) => String(u.email || "").toLowerCase() === normalizedEmail);
+    const valid = user ? await bcrypt.compare(password || "", user.password || "") : false;
+    if (!user || !valid) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
     

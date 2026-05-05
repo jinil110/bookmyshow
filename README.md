@@ -1,13 +1,13 @@
 # CineGo - BookMyShow-like Web App
 **This is a demo project. Payments can run in mock mode if keys are not configured.**
 
-A complete movie ticket booking application built with HTML5, CSS3, vanilla JavaScript, Node.js, Express.js, MongoDB, bcrypt, and express-session.
+A complete movie ticket booking application built with HTML5, CSS3, vanilla JavaScript, Node.js, Express.js, JSON file persistence, bcrypt, and express-session.
 
 ## Features
 
 - User registration, login, logout, and session authentication
 - Password hashing with bcrypt
-- MongoDB persistence with Mongoose models
+- JSON file persistence (`data/*.json`) with no external database dependency
 - Movie search and category filtering
 - Movie details, booking flow, seat selection, fake payment, and confirmation pages
 - User profile with previous booking history
@@ -49,7 +49,6 @@ Admin access:
 
 Required:
 
-- `MONGO_URI`
 - `SESSION_SECRET`
 
 Payments (Razorpay):

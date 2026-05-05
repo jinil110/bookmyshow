@@ -1,6 +1,4 @@
-const Booking = require("../models/Booking");
-const Show = require("../models/Show");
-const Movie = require("../models/Movie");
+const { readCollection, writeCollection, makeId } = require("../data/store");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const { sendBookingReceipt } = require("../utils/emailService");
@@ -12,9 +10,10 @@ const razorpay = new Razorpay({
 
 async function bookedSeats(req, res) {
   try {
-    const show = await Show.findById(req.params.showId);
+    const shows = await readCollection("shows");
+    const show = shows.find((s) => s._id === req.params.showId);
     if (!show) return res.status(404).json({ message: "Show not found." });
-    
+
     res.json({ seats: show.bookedSeats });
   } catch (error) {
     res.status(500).json({ message: "Unable to load booked seats.", error: error.message });
@@ -28,7 +27,8 @@ async function createBooking(req, res) {
       return res.status(400).json({ message: "Show and seats are required." });
     }
 
-    const show = await Show.findById(showId).populate("movie");
+    const shows = await readCollection("shows");
+    const show = shows.find((s) => s._id === showId);
     if (!show) return res.status(404).json({ message: "Show not found." });
 
     const alreadyTaken = seats.filter((seat) => show.bookedSeats.includes(seat));
@@ -38,14 +38,20 @@ async function createBooking(req, res) {
 
     const amount = seats.length * show.price;
 
-    const booking = await Booking.create({
+    const bookings = await readCollection("bookings");
+    const booking = {
+      _id: makeId("booking"),
       user: req.session.user.id,
       show: showId,
       seats,
       totalAmount: amount,
       status: "pending",
       userTimezone: timezone || "Asia/Kolkata",
-    });
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    bookings.push(booking);
+    await writeCollection("bookings", bookings);
 
     res.status(201).json({ message: "Booking created.", booking });
   } catch (error) {
@@ -55,14 +61,18 @@ async function createBooking(req, res) {
 
 async function createRazorpayOrder(req, res) {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const bookings = await readCollection("bookings");
+    const index = bookings.findIndex((b) => (b._id || b.id) === req.params.id);
+    const booking = index >= 0 ? bookings[index] : null;
     if (!booking) return res.status(404).json({ message: "Booking not found." });
     if (booking.status === "confirmed") return res.json({ paid: true, booking });
 
     // Mock Razorpay Order Creation if keys are placeholders
     if (process.env.RAZORPAY_KEY_ID === "rzp_test_replace_me" || !process.env.RAZORPAY_KEY_ID) {
         booking.orderId = `order_mock_${Date.now()}`;
-        await booking.save();
+        booking.updatedAt = new Date().toISOString();
+        bookings[index] = booking;
+        await writeCollection("bookings", bookings);
         return res.json({ 
             orderId: booking.orderId, 
             amount: booking.totalAmount * 100,
@@ -74,12 +84,14 @@ async function createRazorpayOrder(req, res) {
     const options = {
       amount: booking.totalAmount * 100, // amount in smallest currency unit
       currency: "INR",
-      receipt: booking._id.toString(),
+      receipt: String(booking._id),
     };
 
     const order = await razorpay.orders.create(options);
     booking.orderId = order.id;
-    await booking.save();
+    booking.updatedAt = new Date().toISOString();
+    bookings[index] = booking;
+    await writeCollection("bookings", bookings);
 
     res.json(order);
   } catch (error) {
@@ -91,21 +103,36 @@ async function confirmRazorpayPayment(req, res) {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, mock } = req.body;
     
-    const booking = await Booking.findOne({ _id: req.params.id, user: req.session.user.id }).populate('show');
+    const bookings = await readCollection("bookings");
+    const bookingIndex = bookings.findIndex(
+      (b) => (b._id || b.id) === req.params.id && (b.user === req.session.user.id || b.userId === req.session.user.id)
+    );
+    const booking = bookingIndex >= 0 ? bookings[bookingIndex] : null;
     if (!booking) return res.status(404).json({ message: "Booking not found." });
 
     if (mock) {
         booking.status = "confirmed";
         booking.paymentId = `pay_mock_${Date.now()}`;
-        await booking.save();
-        
+        booking.updatedAt = new Date().toISOString();
+        bookings[bookingIndex] = booking;
+        await writeCollection("bookings", bookings);
+
         // Update show seats
-        const show = await Show.findById(booking.show._id).populate('movie');
-        show.bookedSeats.push(...booking.seats);
-        await show.save();
+        const shows = await readCollection("shows");
+        const showIndex = shows.findIndex((s) => s._id === booking.show);
+        if (showIndex === -1) return res.status(404).json({ message: "Show not found." });
+        const show = shows[showIndex];
+        show.bookedSeats = [...new Set([...(show.bookedSeats || []), ...booking.seats])];
+        show.updatedAt = new Date().toISOString();
+        shows[showIndex] = show;
+        await writeCollection("shows", shows);
+
+        const movies = await readCollection("movies");
+        const movie = movies.find((m) => (m._id || m.id) === show.movie);
+        const showWithMovie = { ...show, movie };
 
         // Send Email
-        await sendBookingEmail(req.session.user, booking, show);
+        await sendBookingEmail(req.session.user, booking, showWithMovie);
         
         return res.json({ message: "Mock Payment successful.", booking });
     }
@@ -121,15 +148,26 @@ async function confirmRazorpayPayment(req, res) {
 
     booking.status = "confirmed";
     booking.paymentId = razorpay_payment_id;
-    await booking.save();
+    booking.updatedAt = new Date().toISOString();
+    bookings[bookingIndex] = booking;
+    await writeCollection("bookings", bookings);
 
     // Update show seats
-    const show = await Show.findById(booking.show._id).populate('movie');
-    show.bookedSeats.push(...booking.seats);
-    await show.save();
+    const shows = await readCollection("shows");
+    const showIndex = shows.findIndex((s) => s._id === booking.show);
+    if (showIndex === -1) return res.status(404).json({ message: "Show not found." });
+    const show = shows[showIndex];
+    show.bookedSeats = [...new Set([...(show.bookedSeats || []), ...booking.seats])];
+    show.updatedAt = new Date().toISOString();
+    shows[showIndex] = show;
+    await writeCollection("shows", shows);
+
+    const movies = await readCollection("movies");
+    const movie = movies.find((m) => (m._id || m.id) === show.movie);
+    const showWithMovie = { ...show, movie };
 
     // Send Email
-    await sendBookingEmail(req.session.user, booking, show);
+    await sendBookingEmail(req.session.user, booking, showWithMovie);
 
     res.json({ message: "Payment successful.", booking });
   } catch (error) {
@@ -139,21 +177,44 @@ async function confirmRazorpayPayment(req, res) {
 
 async function getUserBookings(req, res) {
   try {
-    const bookings = await Booking.find({ user: req.session.user.id })
-      .populate({
-          path: "show",
-          populate: {
-              path: "movie"
-          }
+    const bookings = await readCollection("bookings");
+    const shows = await readCollection("shows");
+    const movies = await readCollection("movies");
+    const showMap = new Map(shows.map((s) => [s._id, s]));
+    const movieMap = new Map(movies.map((m) => [m._id || m.id, { ...m, _id: m._id || m.id }]));
+
+    const hydrated = bookings
+      .filter((booking) => booking.user === req.session.user.id || booking.userId === req.session.user.id)
+      .map((booking) => {
+        const show = showMap.get(booking.show);
+        const movie = show
+          ? movieMap.get(show.movie)
+          : booking.movieId
+            ? movieMap.get(booking.movieId)
+            : null;
+        const fallbackShow = {
+          _id: booking.show || null,
+          theaterName: booking.theaterName || "Main Screen",
+          time: booking.showTime || null,
+          city: booking.city || "",
+          area: booking.area || "",
+          movie: movie || null,
+        };
+        return {
+          ...booking,
+          _id: booking._id || booking.id,
+          show: show ? { ...show, movie } : fallbackShow,
+        };
       })
-      .sort({ createdAt: -1 });
-    res.json(bookings);
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    res.json(hydrated);
   } catch (error) {
     res.status(500).json({ message: "Unable to load bookings.", error: error.message });
   }
 }
 
 async function sendBookingEmail(user, booking, show) {
+  const movieTitle = show?.movie?.title || "Your Movie";
   const timezone = booking.userTimezone || "Asia/Kolkata";
   const showTime = new Date(show.time).toLocaleString("en-IN", {
     timeZone: timezone,
@@ -170,7 +231,7 @@ async function sendBookingEmail(user, booking, show) {
         <p style="color: #666666; font-size: 15px; line-height: 1.6;">Get ready for an amazing cinematic experience. Here are your official ticket details:</p>
         
         <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin: 25px 0; border: 1px dashed #cccccc;">
-          <h3 style="margin: 0 0 10px 0; color: #f84464; font-size: 18px;">${show.movie.title}</h3>
+          <h3 style="margin: 0 0 10px 0; color: #f84464; font-size: 18px;">${movieTitle}</h3>
           <p style="margin: 5px 0; color: #333333;"><strong>Theater:</strong> ${show.theaterName}</p>
           <p style="margin: 5px 0; color: #333333;"><strong>Location:</strong> ${show.theaterName}, ${show.area || ""} ${show.city || ""}</p>
           <p style="margin: 5px 0; color: #333333;"><strong>Date & Time:</strong> ${showTime} (${timezone})</p>
@@ -191,7 +252,7 @@ async function sendBookingEmail(user, booking, show) {
 
   try {
     const receipt = {
-      movieName: show.movie.title,
+      movieName: movieTitle,
       seats: booking.seats,
       showTime: show.time,
       amount: booking.totalAmount,
@@ -201,7 +262,7 @@ async function sendBookingEmail(user, booking, show) {
     if (!result.sent) {
       console.log("--- MOCK EMAIL DELIVERED (NO PROVIDER CONFIGURED) ---");
       console.log(`To: ${user.email}`);
-      console.log(`Subject: CineGo receipt for ${show.movie.title}`);
+      console.log(`Subject: CineGo receipt for ${movieTitle}`);
       console.log("----------------------------");
       return;
     }
