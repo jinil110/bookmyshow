@@ -10,8 +10,18 @@ const DEFAULT_SEATS = [
 ];
 
 async function ensureShowsFromMovies() {
-  const shows = await readCollection("shows");
-  if (shows.length) return shows;
+  let shows = await readCollection("shows");
+  const now = new Date();
+  
+  // Check if we have shows for the upcoming 3 days
+  const upcomingDay = new Date();
+  upcomingDay.setDate(upcomingDay.getDate() + 3);
+  const upcomingDayStr = upcomingDay.toISOString().split("T")[0];
+  const hasUpcomingShows = shows.some(s => s.date === upcomingDayStr);
+
+  if (shows.length > 0 && hasUpcomingShows) {
+    return shows;
+  }
 
   const movies = await readCollection("movies");
   const generatedShows = [];
@@ -24,29 +34,52 @@ async function ensureShowsFromMovies() {
     Ahmedabad: "PVR: Acropolis Mall",
   };
 
+  const today = new Date();
   movies.forEach((movie) => {
     const movieId = movie._id || movie.id;
-    (movie.showtimes || []).forEach((time, index) => {
-      const city = cities[index % cities.length];
-      generatedShows.push({
-        _id: makeId("show"),
-        movie: movieId,
-        theaterName: theaterByCity[city] || "Main Screen",
-        city,
-        area: "",
-        date: time.split("T")[0],
-        time: new Date(time).toISOString(),
-        price: Number(movie.price || 200),
-        availableSeats: [...DEFAULT_SEATS],
-        bookedSeats: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+    
+    // Ensure shows for the next 7 days
+    for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + dayOffset);
+      const dateStr = d.toISOString().split("T")[0];
+      
+      // If shows for this movie on this date already exist, skip
+      if (shows.some(s => s.movie === movieId && s.date === dateStr)) {
+        continue;
+      }
+
+      // Add 3 default times per day
+      const times = ["10:30", "15:00", "20:00"];
+      times.forEach((time, index) => {
+        // Distribute shows evenly across cities
+        cities.forEach((city) => {
+          // Just a slight timezone adjustment for standard formatting
+          const localTime = new Date(`${dateStr}T${time}:00`);
+          generatedShows.push({
+            _id: makeId("show"),
+            movie: movieId,
+            theaterName: theaterByCity[city] || "Main Screen",
+            city,
+            area: "",
+            date: dateStr,
+            time: localTime.toISOString(),
+            price: Number(movie.price || 200),
+            availableSeats: [...DEFAULT_SEATS],
+            bookedSeats: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        });
       });
-    });
+    }
   });
 
-  await writeCollection("shows", generatedShows);
-  return generatedShows;
+  if (generatedShows.length > 0) {
+    shows = shows.concat(generatedShows);
+    await writeCollection("shows", shows);
+  }
+  return shows;
 }
 
 async function getMovies(req, res) {
